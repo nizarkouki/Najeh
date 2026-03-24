@@ -1,8 +1,9 @@
-import { Manrope } from "next/font/google";
+import { Sora } from "next/font/google";
+import { ThemeProvider } from "next-themes";
 import "./globals.css";
 
-const manrope = Manrope({
-  variable: "--font-manrope",
+const sora = Sora({
+  variable: "--font-sora",
   subsets: ["latin"],
 });
 
@@ -17,9 +18,14 @@ export default function RootLayout({ children }) {
   return (
     <html
       lang="en"
-      className={`${manrope.variable} ${manrope.variable} h-full antialiased`}
+      className={`${sora.variable} h-full antialiased`}
+      suppressHydrationWarning
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        <ThemeProvider attribute="class" enableSystem defaultTheme="System">
+          {children}
+        </ThemeProvider> 
+      </body>
     </html>
   );
 }
