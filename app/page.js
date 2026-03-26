@@ -6,15 +6,8 @@ import { ThemeToggle } from "@/components/ui/theme-toggle";
 
 export default function Home() {
   return (
-    <div
-      className={` relative min-h-screen overflow-hidden bg-[radial-gradient(circle_at_12%_15%,#ffe7bf_0,#fff4e3_26%,#fff_55%),radial-gradient(circle_at_88%_20%,#c7f9e9_0,#ecfff8_28%,transparent_56%)] text-zinc-900 transition-colors duration-300 dark:bg-[radial-gradient(circle_at_12%_15%,#362715_0,#18120f_34%,#0f0f11_60%),radial-gradient(circle_at_88%_20%,#17322c_0,#101a17_33%,transparent_60%)] dark:text-zinc-100`}
-    >
-      <div className="pointer-events-none absolute inset-0">
-        <div className="absolute left-1/2 top-20 h-72 w-72 -translate-x-1/2 rounded-full bg-amber-300/25 blur-3xl dark:bg-amber-500/15" />
-        <div className="absolute -right-24 top-56 h-80 w-80 rounded-full bg-emerald-300/30 blur-3xl dark:bg-emerald-500/20" />
-      </div>
-
-      <header className="relative z-10 mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-5 sm:px-6 lg:px-8">
+    <>
+      <header className="relative z-10 mx-auto flex w-full max-w-6xl items-center justify-between  sm:px-6 lg:px-8">
         <div className=" w-6xl flex items-center justify-between rounded-full border border-zinc-300/60 bg-white/75 px-10 py-2 backdrop-blur-md dark:border-zinc-700/60 dark:bg-zinc-900/55">
           <Image className="mr-5" src="/logo.png" width={110} height={110} alt="Najeh logo" />
           <div className="flex items-center gap-3">
@@ -155,7 +148,7 @@ export default function Home() {
                 © 2026 Najeh. All rights reserved.
               </p>
               
-              <Link href="https://github.com/nizark0uki" className="text-zinc-600 hover:text-zinc-900 dark:text-zinc-300 dark:hover:text-white" target="_blank">
+              <Link href="https://github.com/nizarkouki" className="text-zinc-600 hover:text-zinc-900 dark:text-zinc-300 dark:hover:text-white" target="_blank">
                 <span className="sr-only">GitHub</span>
                 <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M10 0C4.477 0 0 4.484 0 10.017c0 4.425 2.865 8.18 6.839 9.49.5.092.682-.217.682-.482 0-.237-.008-.868-.013-1.703-2.782.603-3.369-1.343-3.369-1.343-.454-1.156-1.11-1.463-1.11-1.463-.908-.619.069-.605.069-.605 1.002.07 1.527 1.028 1.527 1.028.89 1.524 2.336 1.084 2.902.829.092-.646.351-1.085.635-1.334-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.025A9.578 9.578 0 0110 4.817c.85.004 1.705.114 2.504.336 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.203 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.942.359.31.678.921.678 1.856 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0020 10.017C20 4.484 15.522 0 10 0z" clipRule="evenodd" />
@@ -165,6 +158,6 @@ export default function Home() {
           </div>
         </div>
       </footer>
-    </div>
+    </>
   );
 }
