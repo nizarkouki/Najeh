@@ -125,7 +125,7 @@ export default function Signup (){
           {error && <p className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300">{error}</p>}
           {success && <p className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300">{success}</p>}
 
-          <Button type="submit" disabled={loading} className="h-11 w-full rounded-xl bg-[linear-gradient(130deg,#059669,#10b981)] text-sm font-semibold text-white hover:brightness-105">
+          <Button type="submit" disabled={loading} className="cursor-pointer h-11 w-full rounded-xl bg-[linear-gradient(130deg,#059669,#10b981)] text-sm font-semibold text-white hover:brightness-105">
             {loading ? 'Signing up...' : 'Sign up'}
           </Button>
         </form>

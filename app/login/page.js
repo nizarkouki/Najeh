@@ -113,7 +113,7 @@ export default function Login(){
 
           {error && <p className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300">{error}</p>}
 
-          <Button type="submit" disabled={loading} className="h-11 w-full rounded-xl bg-[linear-gradient(130deg,#ea580c,#f59e0b)] text-sm font-semibold text-white hover:brightness-105">
+          <Button type="submit" disabled={loading} className="cursor-pointer h-11 w-full rounded-xl bg-[linear-gradient(130deg,#ea580c,#f59e0b)] text-sm font-semibold text-white hover:brightness-105">
             {loading ? 'Logging in...' : 'Login'}
           </Button>
 
@@ -121,7 +121,7 @@ export default function Login(){
             type="button"
             disabled={loading}
             onClick={handleGoogleLogin}
-            className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-zinc-300 bg-white/90 px-4 text-sm font-medium text-zinc-800 transition-colors hover:bg-zinc-100 disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
+            className="cursor-pointer inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-zinc-300 bg-white/90 px-4 text-sm font-medium text-zinc-800 transition-colors hover:bg-zinc-100 disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
           >
             Continue with Google
           </button>
