@@ -1,18 +1,30 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse } from "next/server";
 
-const PUBLIC_ROUTES = new Set(["/", "/login", "/signup"]);
+const PUBLIC_ROUTES = new Set(["/", "/login", "/signup", "/auth/callback"]);
 const KNOWN_ROUTES = new Set([
   "/",
   "/login",
   "/signup",
+  "/auth/callback",
   "/main",
   "/main/dashboard",
   "/main/streaks",
   "/main/badges",
+  "/main/generate-plan",
 ]);
 
+// Routes with dynamic segments - check by prefix
+const DYNAMIC_ROUTE_PREFIXES = ["/main/plans/"];
+
 export async function middleware(request) {
+  const { pathname } = request.nextUrl;
+
+
+  if (pathname.startsWith("/api/")) {
+    return NextResponse.next();
+  }
+
   let response = NextResponse.next({
     request: {
       headers: request.headers,
@@ -50,9 +62,8 @@ export async function middleware(request) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const { pathname } = request.nextUrl;
   const isAuthenticated = Boolean(user);
-  const isKnownRoute = KNOWN_ROUTES.has(pathname);
+  const isKnownRoute = KNOWN_ROUTES.has(pathname) || DYNAMIC_ROUTE_PREFIXES.some(prefix => pathname.startsWith(prefix));
 
   if (isAuthenticated) {
     if (pathname === "/" || pathname === "/login" || pathname === "/signup" || !isKnownRoute) {

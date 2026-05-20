@@ -30,7 +30,7 @@ export default function Signup (){
           name,
           full_name: name,
         },
-        emailRedirectTo: `${window.location.origin}/main`,
+        emailRedirectTo: `${window.location.origin}/auth/callback?next=/main`,
       },
     })
 
