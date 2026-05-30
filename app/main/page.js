@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import PlanCard from '@/components/common/plan-card'
 import { createClient } from '@/lib/supabase/client'
+import { useToast } from '@/components/ui/toast'
 
 function mapPlanRowsToCards(planRows, subjectRows, weeklyPlansData, sessionStats) {
   const subjectCounts = subjectRows.reduce((acc, row) => {
@@ -28,6 +29,7 @@ function mapPlanRowsToCards(planRows, subjectRows, weeklyPlansData, sessionStats
     return {
       id: plan.id,
       title: plan.name,
+      status: plan.status || 'active',
       subjects: subjectCounts[plan.id] ?? 0,
       weeklyGoal: `${hours.toFixed(1)}h`,
       progressPercent: Math.round(progress),
@@ -51,6 +53,7 @@ function SkeletonCard() {
 
 export default function Main() {
   const supabase = useMemo(() => createClient(), [])
+  const { showToast } = useToast()
 
   const [plans, setPlans] = useState([])
   const [loadingPlans, setLoadingPlans] = useState(true)
@@ -62,16 +65,15 @@ export default function Main() {
   const [subjectName, setSubjectName] = useState('')
   const [coefficient, setCoefficient] = useState('')
   const [subjects, setSubjects] = useState([])
-  const [error, setError] = useState('')
 
   useEffect(() => {
     setMounted(true)
   }, [])
 
+
   useEffect(() => {
     const loadPlans = async () => {
       setLoadingPlans(true)
-      setError('')
 
       const {
         data: { user },
@@ -85,12 +87,12 @@ export default function Main() {
 
       const { data: planRows, error: plansError } = await supabase
         .from('plans')
-        .select('id, name, created_at')
+        .select('id, name, created_at, status')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false })
 
       if (plansError) {
-        setError(plansError.message)
+        showToast(plansError.message, 'error')
         setPlans([])
         setLoadingPlans(false)
         return
@@ -111,7 +113,7 @@ export default function Main() {
         .in('plan_id', planIds)
 
       if (subjectsError) {
-        setError(subjectsError.message)
+        showToast(subjectsError.message, 'error')
         setPlans(mapPlanRowsToCards(planRows, [], [], {}))
         setLoadingPlans(false)
         return
@@ -124,7 +126,7 @@ export default function Main() {
         .in('plan_id', planIds)
 
       if (weeklyPlansError) {
-        setError(weeklyPlansError.message)
+        showToast(weeklyPlansError.message, 'error')
         setPlans(mapPlanRowsToCards(planRows, subjectRows ?? [], [], {}))
         setLoadingPlans(false)
         return
@@ -199,7 +201,6 @@ export default function Main() {
     setSubjectName('')
     setCoefficient('')
     setSubjects([])
-    setError('')
   }
 
   const handleClose = () => {
@@ -210,7 +211,7 @@ export default function Main() {
 
   const handleAddSubject = () => {
     if (!canAddSubject) {
-      setError('Subject name is required and coefficient must be greater than 0.')
+      showToast('Subject name is required and coefficient must be greater than 0.', 'warning')
       return
     }
 
@@ -224,31 +225,29 @@ export default function Main() {
 
     setSubjectName('')
     setCoefficient('')
-    setError('')
   }
 
   const handleCreatePlan = async (event) => {
     event.preventDefault()
 
     if (!planName.trim()) {
-      setError('Plan name is required.')
+      showToast('Plan name is required.', 'warning')
       return
     }
 
     if (subjects.length === 0) {
-      setError('Add at least one subject before creating the plan.')
+      showToast('Add at least one subject before creating the plan.', 'warning')
       return
     }
 
     setCreatingPlan(true)
-    setError('')
 
     const {
       data: { user },
     } = await supabase.auth.getUser()
 
     if (!user) {
-      setError('You must be signed in to create a plan.')
+      showToast('You must be signed in to create a plan.', 'error')
       setCreatingPlan(false)
       return
     }
@@ -263,7 +262,7 @@ export default function Main() {
       .single()
 
     if (planInsertError || !insertedPlan) {
-      setError(planInsertError?.message ?? 'Failed to create plan.')
+      showToast(planInsertError?.message ?? 'Failed to create plan.', 'error')
       setCreatingPlan(false)
       return
     }
@@ -281,7 +280,7 @@ export default function Main() {
 
     if (subjectInsertError) {
       await supabase.from('plans').delete().eq('id', insertedPlan.id)
-      setError(subjectInsertError.message)
+      showToast(subjectInsertError.message, 'error')
       setCreatingPlan(false)
       return
     }
@@ -290,6 +289,7 @@ export default function Main() {
       {
         id: insertedPlan.id,
         title: insertedPlan.name,
+        status: 'active',
         subjects: subjects.length,
         weeklyGoal: '0h',
         progressPercent: 0,
@@ -299,6 +299,7 @@ export default function Main() {
       ...prev,
     ])
 
+    showToast('Plan created successfully!', 'success')
     setCreatingPlan(false)
     handleClose()
   }
@@ -313,11 +314,32 @@ export default function Main() {
     } = await supabase.auth.getUser()
 
     if (!user) {
-      setError('You must be signed in to delete a plan.')
+      showToast('You must be signed in to delete a plan.', 'error')
       return
     }
 
-    // Delete subjects first (foreign key constraint)
+    // If there are any weekly plans (and sessions) for this plan, remove them first
+    try {
+      const { data: weeklyPlans } = await supabase
+        .from('weekly_plans')
+        .select('id')
+        .eq('plan_id', planId)
+        .eq('user_id', user.id)
+
+      if (weeklyPlans && weeklyPlans.length > 0) {
+        const ids = weeklyPlans.map((w) => w.id)
+
+        // Delete any sessions tied to these weekly plans
+        await supabase.from('weekly_plan_sessions').delete().in('weekly_plan_id', ids)
+
+        // Delete the weekly plans themselves
+        await supabase.from('weekly_plans').delete().in('id', ids)
+      }
+    } catch (e) {
+      // ignore and proceed to subjects deletion; we'll surface subjects error below if it fails
+    }
+
+    // Delete subjects (foreign key constraint)
     const { error: deleteSubjectsError } = await supabase
       .from('subjects')
       .delete()
@@ -325,7 +347,7 @@ export default function Main() {
       .eq('user_id', user.id)
 
     if (deleteSubjectsError) {
-      setError(`Failed to delete subjects: ${deleteSubjectsError.message}`)
+      showToast(`Failed to delete subjects: ${deleteSubjectsError.message}`, 'error')
       return
     }
 
@@ -337,23 +359,18 @@ export default function Main() {
       .eq('user_id', user.id)
 
     if (deletePlanError) {
-      setError(`Failed to delete plan: ${deletePlanError.message}`)
+      showToast(`Failed to delete plan: ${deletePlanError.message}`, 'error')
       return
     }
 
     // Update UI
     setPlans((prev) => prev.filter((plan) => plan.id !== planId))
+    showToast('Plan deleted successfully.', 'success')
   }
 
   return (
     <div className="rounded-2xl border border-zinc-300/60 bg-white/75 p-6 backdrop-blur-md transition-colors duration-300 dark:border-zinc-700/60 dark:bg-zinc-900/55">
       <h2 className="text-lg font-semibold">Your Plans</h2>
-
-      {error && !open ? (
-        <p className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300">
-          {error}
-        </p>
-      ) : null}
 
       <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
         {loadingPlans ? (
@@ -369,6 +386,7 @@ export default function Main() {
             key={plan.id}
             id={plan.id}
             title={plan.title}
+            status={plan.status}
             subjects={plan.subjects}
             weeklyGoal={plan.weeklyGoal}
             progressPercent={plan.progressPercent}
@@ -468,12 +486,6 @@ export default function Main() {
                       ))}
                     </div>
                   </div>
-
-                  {error ? (
-                    <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300">
-                      {error}
-                    </p>
-                  ) : null}
 
                   <div className="flex justify-end gap-2">
                     <button

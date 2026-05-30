@@ -15,7 +15,7 @@ const pageNames = {
 }
 
 
-export default function Navbar ({ onOpenSidebar, streakDays = 101 }) {
+export default function Navbar ({ onOpenSidebar, streakDays = 0 }) {
   const [loading, setLoading] = useState(false)
   const pathname = usePathname()
   const router = useRouter()

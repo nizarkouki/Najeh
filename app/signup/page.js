@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/client"
 import { useState } from "react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
+import { useToast } from "@/components/ui/toast"
 
 
 export default function Signup (){
@@ -10,16 +11,13 @@ export default function Signup (){
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState(null)
-  const [success, setSuccess] = useState(null)
   const [showPassword, setShowPassword] = useState(false)
+  const { showToast } = useToast()
 
   const supabase = createClient()
 
   const handleEmailSignup = async (e) => {
     e.preventDefault()
-    setError(null)
-    setSuccess(null)
     setLoading(true)
 
     const { error } = await supabase.auth.signUp({
@@ -35,9 +33,9 @@ export default function Signup (){
     })
 
     if (error) {
-      setError(error.message)
+      showToast(error.message, 'error')
     } else {
-      setSuccess("Account created. Check your email for confirmation.")
+      showToast("Account created. Check your email for confirmation.", 'success')
       setName("")
       setEmail("")
       setPassword("")
@@ -121,9 +119,6 @@ export default function Signup (){
               </button>
             </div>
           </div>
-
-          {error && <p className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300">{error}</p>}
-          {success && <p className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300">{success}</p>}
 
           <Button type="submit" disabled={loading} className="cursor-pointer h-11 w-full rounded-xl bg-[linear-gradient(130deg,#059669,#10b981)] text-sm font-semibold text-white hover:brightness-105">
             {loading ? 'Signing up...' : 'Sign up'}

@@ -3,36 +3,95 @@
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { useEffect, useMemo, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { useToast } from '@/components/ui/toast'
 
 const DAYS_OF_WEEK = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+
+function getLocalDateKey(date = new Date()) {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+function getCurrentWeekStartMonday() {
+  const today = new Date()
+  const day = today.getDay()
+  const daysSinceMonday = (day + 6) % 7
+  const weekStart = new Date(today)
+  weekStart.setHours(0, 0, 0, 0)
+  weekStart.setDate(weekStart.getDate() - daysSinceMonday)
+  return weekStart
+}
 
 export default function PlanDetailPage() {
   const params = useParams()
   const planId = params.planId
   const supabase = useMemo(() => createClient(), [])
+  const todayDateKey = useMemo(() => getLocalDateKey(), [])
+  const { showToast } = useToast()
 
   const [plan, setPlan] = useState(null)
   const [weeklyPlan, setWeeklyPlan] = useState(null)
   const [sessions, setSessions] = useState([])
   const [loading, setLoading] = useState(true)
   const [isLocked, setIsLocked] = useState(false)
+  const [isInactive, setIsInactive] = useState(false)
   const [locking, setLocking] = useState(false)
-  const [error, setError] = useState('')
-  const [actionError, setActionError] = useState('')
-  const [notice, setNotice] = useState('')
+  const [inactivating, setInactivating] = useState(false)
+  
+  const router = useRouter()
+
+  const handleMarkComplete = async (session) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        showToast('Not authenticated', 'error')
+        return
+      }
+
+      const res = await fetch(`/api/weekly-sessions/${session.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'completed' }),
+      })
+
+      const json = await res.json()
+      if (!res.ok) {
+        showToast(json.error || 'Failed to mark session complete', 'error')
+        return
+      }
+
+      setSessions((prev) => prev.map((s) => (s.id === session.id ? { ...s, status: 'completed' } : s)))
+      window.dispatchEvent(
+        new CustomEvent('streak-updated', {
+          detail: {
+            currentStreak: json?.streak?.current_streak,
+          },
+        })
+      )
+      const streakMessage = json?.streak?.current_streak != null
+        ? `Session marked completed. Current streak: ${json.streak.current_streak}`
+        : 'Session marked completed'
+      showToast(streakMessage, 'success')
+    } catch (err) {
+      showToast(err.message || 'Failed to mark session complete', 'error')
+    }
+  }
+
+  
 
   const handleLockPlan = async () => {
-    if (!weeklyPlan || isLocked) return
+    if (!weeklyPlan || isLocked || isInactive) return
 
     setLocking(true)
-    setActionError('')
-    setNotice('')
 
     try {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) {
-        setActionError('Not authenticated')
+        showToast('Not authenticated', 'error')
         setLocking(false)
         return
       }
@@ -48,17 +107,54 @@ export default function PlanDetailPage() {
         .eq('user_id', user.id)
 
       if (lockError) {
-        setActionError(`Failed to lock plan: ${lockError.message}`)
+        showToast(`Failed to lock plan: ${lockError.message}`, 'error')
         setLocking(false)
         return
       }
 
       setIsLocked(true)
-      setNotice('Plan locked. You can generate a new weekly plan next Monday.')
+      showToast('Plan locked. You can generate a new weekly plan next Monday.', 'success')
     } catch (err) {
-      setActionError(err.message || 'Failed to lock plan')
+      showToast(err.message || 'Failed to lock plan', 'error')
     } finally {
       setLocking(false)
+    }
+  }
+
+  const handleMarkInactive = async () => {
+    if (isInactive) return
+
+    setInactivating(true)
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        showToast('Not authenticated', 'error')
+        setInactivating(false)
+        return
+      }
+
+      const { error: updateError } = await supabase
+        .from('plans')
+        .update({
+          status: 'inactive',
+          inactive_at: new Date().toISOString(),
+        })
+        .eq('id', planId)
+        .eq('user_id', user.id)
+
+      if (updateError) {
+        showToast(`Failed to mark plan inactive: ${updateError.message}`, 'error')
+        return
+      }
+
+      setIsInactive(true)
+      setPlan((current) => (current ? { ...current, status: 'inactive' } : current))
+      showToast('Plan marked as completed. It cannot be activated again.', 'success')
+    } catch (err) {
+      showToast(err.message || 'Failed to mark plan inactive', 'error')
+    } finally {
+      setInactivating(false)
     }
   }
 
@@ -70,7 +166,7 @@ export default function PlanDetailPage() {
       // Load plan
       const { data: planData, error: planError } = await supabase
         .from('plans')
-        .select('id, name')
+        .select('id, name, status')
         .eq('id', planId)
         .eq('user_id', user.id)
         .single()
@@ -82,6 +178,7 @@ export default function PlanDetailPage() {
       }
 
       setPlan(planData)
+  setIsInactive(planData.status === 'inactive')
 
       // Load weekly plan
       const { data: weeklyData } = await supabase
@@ -146,14 +243,6 @@ export default function PlanDetailPage() {
     )
   }
 
-  if (error) {
-    return (
-      <div className="rounded-2xl border border-red-300 bg-red-50 p-6 dark:border-red-900/50 dark:bg-red-950/30">
-        <p className="text-red-700 dark:text-red-300">{error}</p>
-      </div>
-    )
-  }
-
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -180,39 +269,30 @@ export default function PlanDetailPage() {
           </div>
         )}
 
-        {actionError && (
-          <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-900/50 dark:bg-red-950/30">
-            <p className="text-sm text-red-700 dark:text-red-300">{actionError}</p>
-          </div>
-        )}
-
-        {notice && (
-          <div className="mt-3 rounded-lg border border-green-200 bg-green-50 p-3 dark:border-green-900/50 dark:bg-green-950/30">
-            <p className="text-sm text-green-700 dark:text-green-300">{notice}</p>
-          </div>
-        )}
       </div>
 
       {/* Action Buttons */}
-      {!isLocked && (
+      {!isLocked && !isInactive && (
         <div className="grid gap-3 grid-cols-1 sm:grid-cols-3">
           <Link href={`/main/generate-plan?planId=${planId}`} className="flex-1">
             <button className="w-full cursor-pointer rounded-lg bg-amber-500 px-4 py-2 font-medium text-white transition hover:bg-amber-600 dark:hover:bg-amber-500">
               ✨ Generate with AI
             </button>
           </Link>
-          <button className="flex-1 cursor-pointer rounded-lg border border-zinc-300 px-4 py-2 font-medium transition hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800">
-            ✏️ Create Manually
-          </button>
-          <button
-            onClick={handleLockPlan}
-            disabled={!weeklyPlan || locking}
-            className="flex-1 cursor-pointer rounded-lg border border-red-300 px-4 py-2 font-medium text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-900/60 dark:text-red-300 dark:hover:bg-red-950/30"
-          >
-            {locking ? 'Locking...' : '🔒 Lock Plan'}
-          </button>
+          <div />
+          <div />
         </div>
       )}
+
+      {isInactive && (
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 dark:border-emerald-900/50 dark:bg-emerald-950/30">
+          <p className="text-sm text-emerald-700 dark:text-emerald-300">
+            This plan is completed and inactive. You cannot create or generate a weekly plan for it again.
+          </p>
+        </div>
+      )}
+
+      
 
       {/* Calendar View */}
       <div className="rounded-2xl border border-zinc-300/60 bg-white/75 p-6 backdrop-blur-md dark:border-zinc-700/60 dark:bg-zinc-900/55">
@@ -221,7 +301,7 @@ export default function PlanDetailPage() {
         {sessions.length === 0 ? (
           <div className="rounded-lg border border-dashed border-zinc-300 bg-zinc-50 p-8 text-center dark:border-zinc-700 dark:bg-zinc-900/50">
             <p className="text-zinc-600 dark:text-zinc-400">
-              No weekly plan yet. {!isLocked && 'Generate or create one to get started!'}
+              No weekly plan yet. {!isLocked && !isInactive && 'Generate or create one to get started!'}
             </p>
           </div>
         ) : (
@@ -271,7 +351,17 @@ export default function PlanDetailPage() {
                             {session.status === 'completed' ? '✓' : '◯'}
                           </span>
                         </div>
-                      </div>
+                        {!isInactive && session.status !== 'completed' && getLocalDateKey(new Date(session.scheduled_date)) === todayDateKey && (
+                          <div className="mt-2 flex gap-2">
+                            <button
+                              onClick={() => handleMarkComplete(session)}
+                              className="cursor-pointer rounded bg-emerald-500 px-3 py-1 text-sm text-white transition-colors hover:bg-emerald-600"
+                            >
+                              Mark Complete
+                            </button>
+                          </div>
+                        )}
+                        </div>
                     ))}
                   </div>
                 </div>

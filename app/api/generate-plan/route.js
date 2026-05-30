@@ -15,6 +15,35 @@ function extractJsonPayload(rawText) {
   return trimmed
 }
 
+function normalizeGuidance(guidance) {
+  if (!guidance) {
+    return {
+      quickTips: [],
+      sessionSwapSuggestions: [],
+      focusNotes: [],
+    }
+  }
+
+  if (typeof guidance === 'string') {
+    return {
+      quickTips: guidance
+        .split(/\n+/)
+        .map((line) => line.trim().replace(/^[-*•]\s*/, ''))
+        .filter(Boolean),
+      sessionSwapSuggestions: [],
+      focusNotes: [],
+    }
+  }
+
+  return {
+    quickTips: Array.isArray(guidance.quickTips) ? guidance.quickTips.filter(Boolean) : [],
+    sessionSwapSuggestions: Array.isArray(guidance.sessionSwapSuggestions)
+      ? guidance.sessionSwapSuggestions.filter(Boolean)
+      : [],
+    focusNotes: Array.isArray(guidance.focusNotes) ? guidance.focusNotes.filter(Boolean) : [],
+  }
+}
+
 export async function POST(request) {
   try {
     // Verify user is authenticated
@@ -48,6 +77,21 @@ export async function POST(request) {
       )
     }
 
+    const { data: planRow, error: planRowError } = await supabase
+      .from('plans')
+      .select('id, status')
+      .eq('id', planId)
+      .eq('user_id', user.id)
+      .single()
+
+    if (planRowError || !planRow) {
+      return Response.json({ error: 'Plan not found' }, { status: 404 })
+    }
+
+    if (planRow.status === 'inactive') {
+      return Response.json({ error: 'Inactive plans cannot generate weekly schedules.' }, { status: 400 })
+    }
+
     // Format the prompt for Gemini with STRICT rules
     const daysText = Object.entries(weekDaysWithHours)
       .map(([day, hours]) => `${day}: ${hours} hours (${hours * 60} minutes)`)
@@ -56,8 +100,6 @@ export async function POST(request) {
     const subjectsText = subjects
       .map((s) => `${s.name} (coefficient: ${s.coefficient})`)
       .join('\n')
-
-    const highCoeffSubjects = subjects.filter((s) => s.coefficient >= 7).length
 
     const prompt = `You are an expert study planner. Create a DETAILED weekly study plan following STRICT rules.
 
@@ -93,13 +135,26 @@ Generate a JSON response with this EXACT structure:
     }
     ... (only include days with available hours)
   },
-  "notes": "Study tips and recommendations"
+  "guidance": {
+    "quickTips": ["Short tip 1", "Short tip 2", "Short tip 3"],
+    "focusNotes": ["Short note about the week", "Short note about balance"],
+    "sessionSwapSuggestions": [
+      {
+        "day": "Wednesday",
+        "session": 3,
+        "suggestion": "If you need more Info practice, replace this session with Info instead of Math."
+      }
+    ]
+  }
 }
 
 Important: 
 - totalMinutes on each day MUST equal the available hours × 60
 - Only include days that have available study hours
 - Ensure NO day has two or more highest-coefficient subjects
+- Keep guidance short, concrete, and easy to scan. Prefer 2-4 short bullets per section.
+- If two subjects have equal coefficients, keep the plan balanced but feel free to suggest a practical session swap when one subject needs more attention.
+- Do not write long paragraphs. Each guidance line should be one concise sentence.
 - Return ONLY valid JSON, no markdown or extra text`
 
     const responseText = await generatePlanJson(prompt)
@@ -125,8 +180,11 @@ Important:
     }
 
     // Enhance each session with Pomodoro times
+    const guidance = normalizeGuidance(generatedPlan.guidance ?? generatedPlan.notes)
+
     const enhancedPlan = {
       ...generatedPlan,
+      guidance,
       dailyBreakdown: {},
     }
 

@@ -1,6 +1,7 @@
 import { Sora } from "next/font/google";
-import { ThemeProvider } from "next-themes";
+import ThemeProviderClient from "@/components/ThemeProviderClient";
 import { BackgroundShell } from "@/components/ui/background-shell";
+import { ToastProvider } from "@/components/ui/toast";
 import "./globals.css";
 
 const sora = Sora({
@@ -23,11 +24,13 @@ export default function RootLayout({ children }) {
       suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col">
-        <ThemeProvider attribute="class" enableSystem defaultTheme="System">
-          <BackgroundShell>
-            {children}
-          </BackgroundShell>   
-        </ThemeProvider> 
+        <ThemeProviderClient>
+          <ToastProvider>
+            <BackgroundShell>
+              {children}
+            </BackgroundShell>
+          </ToastProvider>
+        </ThemeProviderClient>
       </body>
     </html>
   );

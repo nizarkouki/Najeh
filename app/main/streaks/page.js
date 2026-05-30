@@ -1,3 +1,6 @@
+"use client"
+
+import { useEffect, useMemo, useState } from 'react'
 import {
   FaBolt,
   FaCompass,
@@ -8,14 +11,8 @@ import {
   FaPhoenixFramework,
   FaRocket,
   FaStar,
-  FaTrophy
+  FaTrophy,
 } from 'react-icons/fa6'
-
-const streakState = {
-  current: 12,
-  longest: 21,
-  totalActiveDays: 86
-}
 
 const streakMilestones = [
   { days: 0, title: 'Dormant Ember', icon: null },
@@ -27,16 +24,58 @@ const streakMilestones = [
   { days: 50, title: 'Inferno Knight', icon: FaCrown },
   { days: 70, title: 'Radiant Warden', icon: FaStar },
   { days: 100, title: 'Phoenix Ascendant', icon: FaPhoenixFramework },
-  { days: 200, title: 'Eternal Legend', icon: FaTrophy }
+  { days: 200, title: 'Eternal Legend', icon: FaTrophy },
 ]
 
-const nextMilestone =
-  streakMilestones.find((item) => item.days > streakState.current) ?? streakMilestones[streakMilestones.length - 1]
-
-const remainingDays = Math.max(nextMilestone.days - streakState.current, 0)
-const progressToNext = Math.min((streakState.current / nextMilestone.days) * 100, 100)
-
 export default function StreaksPage() {
+  const [streakState, setStreakState] = useState({ current: 0, longest: 0, totalActiveDays: 0 })
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let mounted = true
+
+    ;(async () => {
+      try {
+        const response = await fetch('/api/gamification')
+        const json = await response.json()
+        const streak = json?.streak || {}
+
+        if (mounted) {
+          setStreakState({
+            current: streak.current_streak || 0,
+            longest: streak.longest_streak || 0,
+            totalActiveDays: json?.stats?.noZeroDays || 0,
+          })
+        }
+      } catch {
+        if (mounted) {
+          setStreakState({ current: 0, longest: 0, totalActiveDays: 0 })
+        }
+      } finally {
+        if (mounted) setLoading(false)
+      }
+    })()
+
+    return () => {
+      mounted = false
+    }
+  }, [])
+
+  const nextMilestone = useMemo(() => {
+    return streakMilestones.find((item) => item.days > streakState.current) ?? streakMilestones[streakMilestones.length - 1]
+  }, [streakState.current])
+
+  const remainingDays = Math.max((nextMilestone?.days || 0) - streakState.current, 0)
+  const progressToNext = nextMilestone?.days ? Math.min((streakState.current / nextMilestone.days) * 100, 100) : 100
+
+  if (loading) {
+    return (
+      <div className="rounded-2xl border border-zinc-300/60 bg-white/75 p-6 backdrop-blur-md dark:border-zinc-700/60 dark:bg-zinc-900/55">
+        <p className="text-sm text-zinc-600 dark:text-zinc-300">Loading streaks...</p>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-5">
       <section className="rounded-2xl border border-zinc-300/60 bg-white/75 p-6 backdrop-blur-md transition-colors duration-300 dark:border-zinc-700/60 dark:bg-zinc-900/55">

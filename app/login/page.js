@@ -4,22 +4,22 @@ import { useState } from "react"
 import Link from 'next/link'
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
+import { useToast } from "@/components/ui/toast"
 
 
 export default function Login(){
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState(null)
   const [showPassword, setShowPassword] = useState(false)
 
   const router = useRouter()
   const supabase = createClient()
+  const { showToast } = useToast()
 
   const handleEmailLogin = async (e) => {
     e.preventDefault()
     setLoading(true)
-    setError(null)
 
     const { error } = await supabase.auth.signInWithPassword({
       email,
@@ -27,9 +27,12 @@ export default function Login(){
     })
 
     if (!error){
+      showToast('Login successful!', 'success')
       router.push('/main')
       router.refresh()
-    } else setError(error.message)
+    } else {
+      showToast(error.message, 'error')
+    }
 
     setLoading(false)
   }
@@ -43,7 +46,9 @@ export default function Login(){
         redirectTo: `${window.location.origin}/auth/callback?next=/main`,
       },
     })
-    if (error) setError(error.message)
+    if (error) {
+      showToast(error.message, 'error')
+    }
     setLoading(false)
   }
 
@@ -110,8 +115,6 @@ export default function Login(){
               </button>
             </div>
           </div>
-
-          {error && <p className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300">{error}</p>}
 
           <Button type="submit" disabled={loading} className="cursor-pointer h-11 w-full rounded-xl bg-[linear-gradient(130deg,#ea580c,#f59e0b)] text-sm font-semibold text-white hover:brightness-105">
             {loading ? 'Logging in...' : 'Login'}

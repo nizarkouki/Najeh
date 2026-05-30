@@ -4,6 +4,7 @@ import Link from 'next/link'
 export default function PlanCard({
     id,
     title,
+    status,
     subjects,
     weeklyGoal,
     progressPercent,
@@ -16,7 +17,14 @@ export default function PlanCard({
             <Link href={`/main/plans/${id}`}>
                 <article className="group rounded-2xl border border-zinc-300/70 bg-[linear-gradient(145deg,rgba(255,255,255,.9),rgba(245,245,244,.8))] p-5 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg dark:border-zinc-700/70 dark:bg-[linear-gradient(145deg,rgba(39,39,42,.85),rgba(24,24,27,.75))] cursor-pointer">
                     <div className="flex items-start justify-between gap-3">
-                        <h3 className="text-base font-semibold">{title}</h3>
+                        <div className="min-w-0">
+                            <h3 className="text-base font-semibold">{title}</h3>
+                            {status === 'inactive' ? (
+                                <span className="mt-1 inline-flex rounded-full border border-emerald-300/70 bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 dark:border-emerald-800/60 dark:bg-emerald-950/30 dark:text-emerald-300">
+                                    Completed
+                                </span>
+                            ) : null}
+                        </div>
                         <button
                             onClick={(e) => {
                                 e.preventDefault()

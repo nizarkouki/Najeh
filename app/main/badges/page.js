@@ -1,3 +1,6 @@
+"use client"
+
+import { useEffect, useMemo, useState } from 'react'
 import {
   FaBolt,
   FaBrain,
@@ -12,103 +15,76 @@ import {
   FaTableList,
 } from 'react-icons/fa6'
 
-const userStats = {
-  totalHours: 132,
-  totalSessions: 118,
-  perfectWeeks: 2,
-  flawlessMonths: 0,
-  noZeroDays: 24,
-  plansFollowed: 7,
-  adaptiveWeeks: 3,
-  earlySessions: 16,
-  nightSessions: 9,
-  comebackCount: 2
-}
-
-const allBadges = [
-  {
-    name: 'Hour Hunter',
-    icon: FaClock,
-    requirement: 'Reach 100 study hours',
-    unlocked: userStats.totalHours >= 100,
-    progress: `${Math.min(userStats.totalHours, 100)}/100 h`
-  },
-  {
-    name: 'Marathon Scholar',
-    icon: FaPersonRunning,
-    requirement: 'Reach 500 study hours',
-    unlocked: userStats.totalHours >= 500,
-    progress: `${Math.min(userStats.totalHours, 500)}/500 h`
-  },
-  {
-    name: 'Session Master',
-    icon: FaMedal,
-    requirement: 'Complete 100 sessions',
-    unlocked: userStats.totalSessions >= 100,
-    progress: `${Math.min(userStats.totalSessions, 100)}/100 sessions`
-  },
-  {
-    name: 'Perfect Week',
-    icon: FaTableList,
-    requirement: 'Finish all scheduled sessions for a full week',
-    unlocked: userStats.perfectWeeks >= 1,
-    progress: `${Math.min(userStats.perfectWeeks, 1)}/1 week`
-  },
-  {
-    name: 'Flawless Month',
-    icon: FaFaceGrinStars,
-    requirement: 'Finish all scheduled sessions for a full month',
-    unlocked: userStats.flawlessMonths >= 1,
-    progress: `${Math.min(userStats.flawlessMonths, 1)}/1 month`
-  },
-  {
-    name: 'No-Zero Hero',
-    icon: FaFire,
-    requirement: '30 days with at least one completed session',
-    unlocked: userStats.noZeroDays >= 30,
-    progress: `${Math.min(userStats.noZeroDays, 30)}/30 days`
-  },
-  {
-    name: 'Planner Pro',
-    icon: FaLayerGroup,
-    requirement: 'Successfully follow 10 generated plans',
-    unlocked: userStats.plansFollowed >= 10,
-    progress: `${Math.min(userStats.plansFollowed, 10)}/10 plans`
-  },
-  {
-    name: 'Adaptive Genius',
-    icon: FaBrain,
-    requirement: 'Complete 4 weeks with AI feedback adjustments',
-    unlocked: userStats.adaptiveWeeks >= 4,
-    progress: `${Math.min(userStats.adaptiveWeeks, 4)}/4 weeks`
-  },
-  {
-    name: 'Early Bird',
-    icon: FaSun,
-    requirement: 'Complete 10 morning sessions before 8:00 AM',
-    unlocked: userStats.earlySessions >= 10,
-    progress: `${Math.min(userStats.earlySessions, 10)}/10 sessions`
-  },
-  {
-    name: 'Night Owl',
-    icon: FaMoon,
-    requirement: 'Complete 10 late sessions after 10:00 PM',
-    unlocked: userStats.nightSessions >= 10,
-    progress: `${Math.min(userStats.nightSessions, 10)}/10 sessions`
-  },
-  {
-    name: 'Comeback Kid',
-    icon: FaBolt,
-    requirement: 'Recover streak after missing day, at least once',
-    unlocked: userStats.comebackCount >= 1,
-    progress: `${Math.min(userStats.comebackCount, 1)}/1 comeback`
-  }
+const badgeCatalog = [
+  { key: 'hour_hunter', name: 'Hour Hunter', icon: FaClock, requirement: 'Reach 100 study hours', statKey: 'totalHours', threshold: 100, unit: 'h' },
+  { key: 'marathon_scholar', name: 'Marathon Scholar', icon: FaPersonRunning, requirement: 'Reach 500 study hours', statKey: 'totalHours', threshold: 500, unit: 'h' },
+  { key: 'session_master', name: 'Session Master', icon: FaMedal, requirement: 'Complete 100 sessions', statKey: 'totalSessions', threshold: 100, unit: 'sessions' },
+  { key: 'perfect_week', name: 'Perfect Week', icon: FaTableList, requirement: 'Finish all scheduled sessions for a full week', statKey: 'perfectWeeks', threshold: 1, unit: 'week' },
+  { key: 'flawless_month', name: 'Flawless Month', icon: FaFaceGrinStars, requirement: 'Finish all scheduled sessions for a full month', statKey: 'flawlessMonths', threshold: 1, unit: 'month' },
+  { key: 'no_zero_hero', name: 'No-Zero Hero', icon: FaFire, requirement: '30 days with at least one completed session', statKey: 'noZeroDays', threshold: 30, unit: 'days' },
+  { key: 'planner_pro', name: 'Planner Pro', icon: FaLayerGroup, requirement: 'Successfully follow 10 generated plans', statKey: 'plansFollowed', threshold: 10, unit: 'plans' },
+  { key: 'adaptive_genius', name: 'Adaptive Genius', icon: FaBrain, requirement: 'Complete 4 weeks with AI feedback adjustments', statKey: 'adaptiveWeeks', threshold: 4, unit: 'weeks' },
+  { key: 'early_bird', name: 'Early Bird', icon: FaSun, requirement: 'Complete 10 morning sessions before 8:00 AM', statKey: 'earlySessions', threshold: 10, unit: 'sessions' },
+  { key: 'night_owl', name: 'Night Owl', icon: FaMoon, requirement: 'Complete 10 late sessions after 10:00 PM', statKey: 'nightSessions', threshold: 10, unit: 'sessions' },
+  { key: 'comeback_kid', name: 'Comeback Kid', icon: FaBolt, requirement: 'Recover streak after missing day, at least once', statKey: 'comebackCount', threshold: 1, unit: 'comeback' },
 ]
 
-const unlockedBadges = allBadges.filter((badge) => badge.unlocked)
-const lockedBadges = allBadges.filter((badge) => !badge.unlocked)
+function formatProgress(value, threshold, unit) {
+  if (unit === 'h') {
+    return `${Math.min(value, threshold).toFixed(1)}/${threshold} h`
+  }
+
+  return `${Math.min(value, threshold)}/${threshold} ${unit}`
+}
 
 export default function BadgesPage() {
+  const [stats, setStats] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let mounted = true
+
+    ;(async () => {
+      try {
+        const response = await fetch('/api/gamification')
+        const json = await response.json()
+        if (mounted) setStats(json?.stats || null)
+      } catch {
+        if (mounted) setStats(null)
+      } finally {
+        if (mounted) setLoading(false)
+      }
+    })()
+
+    return () => {
+      mounted = false
+    }
+  }, [])
+
+  const allBadges = useMemo(() => {
+    const currentStats = stats || {}
+
+    return badgeCatalog.map((badge) => {
+      const value = Number(currentStats[badge.statKey] || 0)
+      return {
+        ...badge,
+        unlocked: value >= badge.threshold,
+        progress: formatProgress(value, badge.threshold, badge.unit),
+      }
+    })
+  }, [stats])
+
+  const unlockedBadges = allBadges.filter((badge) => badge.unlocked)
+  const lockedBadges = allBadges.filter((badge) => !badge.unlocked)
+
+  if (loading) {
+    return (
+      <div className="rounded-2xl border border-zinc-300/60 bg-white/75 p-6 backdrop-blur-md dark:border-zinc-700/60 dark:bg-zinc-900/55">
+        <p className="text-sm text-zinc-600 dark:text-zinc-300">Loading badges...</p>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-5">
       <section className="rounded-2xl border border-zinc-300/60 bg-white/75 p-6 backdrop-blur-md transition-colors duration-300 dark:border-zinc-700/60 dark:bg-zinc-900/55">
@@ -126,7 +102,7 @@ export default function BadgesPage() {
 
             return (
               <article
-                key={badge.name}
+                key={badge.key}
                 className="rounded-xl border border-emerald-300/70 bg-white/80 p-4 dark:border-emerald-700/60 dark:bg-zinc-900/60"
               >
                 <div className="flex items-center gap-2">
@@ -151,7 +127,7 @@ export default function BadgesPage() {
 
             return (
               <article
-                key={badge.name}
+                key={badge.key}
                 className="rounded-xl border border-amber-300/70 bg-white/80 p-4 dark:border-amber-700/60 dark:bg-zinc-900/60"
               >
                 <div className="flex items-center gap-2">

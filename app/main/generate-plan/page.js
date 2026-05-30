@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useMemo, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { useToast } from '@/components/ui/toast'
 
 const DAYS_OF_WEEK = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 const DAY_OFFSETS_FROM_MONDAY = {
@@ -28,14 +29,76 @@ function getCurrentWeekStartMonday() {
 
 function getRemainingDaysOfWeek() {
   const today = new Date()
-  const todayDay = today.getDay()
-  
   const remainingDays = {}
-  for (let i = todayDay; i < 7; i++) {
-    const day = DAYS_OF_WEEK[i]
+  const daysUntilSunday = (7 - today.getDay()) % 7
+
+  for (let i = 0; i <= daysUntilSunday; i++) {
+    const date = new Date(today)
+    date.setDate(today.getDate() + i)
+    const day = DAYS_OF_WEEK[date.getDay()]
     remainingDays[day] = 0
   }
   return remainingDays
+}
+
+function GuidancePanel({ guidance }) {
+  const quickTips = guidance?.quickTips ?? []
+  const focusNotes = guidance?.focusNotes ?? []
+  const sessionSwapSuggestions = guidance?.sessionSwapSuggestions ?? []
+
+  if (!quickTips.length && !focusNotes.length && !sessionSwapSuggestions.length) {
+    return null
+  }
+
+  return (
+    <div className="grid gap-3 md:grid-cols-3">
+      {quickTips.length > 0 && (
+        <div className="rounded-xl border border-sky-200 bg-sky-50 p-4 shadow-sm dark:border-sky-900/50 dark:bg-sky-950/30">
+          <p className="text-xs font-semibold uppercase tracking-wide text-sky-700 dark:text-sky-300">Quick Tips</p>
+          <ul className="mt-3 space-y-2 text-sm text-sky-900 dark:text-sky-100">
+            {quickTips.slice(0, 4).map((tip, index) => (
+              <li key={`${tip}-${index}`} className="flex gap-2">
+                <span className="mt-1 inline-block h-2 w-2 rounded-full bg-sky-500" />
+                <span>{tip}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {focusNotes.length > 0 && (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 shadow-sm dark:border-emerald-900/50 dark:bg-emerald-950/30">
+          <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-300">Focus Notes</p>
+          <ul className="mt-3 space-y-2 text-sm text-emerald-900 dark:text-emerald-100">
+            {focusNotes.slice(0, 4).map((note, index) => (
+              <li key={`${note}-${index}`} className="flex gap-2">
+                <span className="mt-1 inline-block h-2 w-2 rounded-full bg-emerald-500" />
+                <span>{note}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {sessionSwapSuggestions.length > 0 && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 shadow-sm dark:border-amber-900/50 dark:bg-amber-950/30 md:col-span-1">
+          <p className="text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-300">Swap Ideas</p>
+          <div className="mt-3 space-y-3 text-sm text-amber-900 dark:text-amber-100">
+            {sessionSwapSuggestions.slice(0, 3).map((suggestion, index) => (
+              <div key={`${suggestion.day || 'swap'}-${index}`} className="rounded-lg border border-amber-200 bg-white/80 p-3 dark:border-amber-900/50 dark:bg-amber-950/40">
+                <p className="font-semibold">
+                  {suggestion.day || 'Flexible swap'}{suggestion.session ? ` · Session ${suggestion.session}` : ''}
+                </p>
+                <p className="mt-1 text-xs leading-5 text-amber-800 dark:text-amber-200">
+                  {suggestion.suggestion}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
 }
 
 export default function GeneratePlanPage() {
@@ -43,8 +106,10 @@ export default function GeneratePlanPage() {
   const searchParams = useSearchParams()
   const queryPlanId = searchParams.get('planId')
   const supabase = useMemo(() => createClient(), [])
+  const { showToast } = useToast()
 
   const [planName, setPlanName] = useState('')
+  const [planStatus, setPlanStatus] = useState('active')
   const [selectedPlan, setSelectedPlan] = useState(queryPlanId || null)
   const [subjects, setSubjects] = useState([])
   
@@ -57,8 +122,6 @@ export default function GeneratePlanPage() {
   const [saving, setSaving] = useState(false)
   const [isGenerationBlocked, setIsGenerationBlocked] = useState(false)
   const [blockedUntilLabel, setBlockedUntilLabel] = useState('')
-  const [error, setError] = useState('')
-  const [success, setSuccess] = useState('')
 
   // Load current plan details on mount
   useEffect(() => {
@@ -70,13 +133,14 @@ export default function GeneratePlanPage() {
 
       const { data: planData } = await supabase
         .from('plans')
-        .select('id, name')
+        .select('id, name, status')
         .eq('id', selectedPlan)
         .eq('user_id', user.id)
         .single()
 
       if (planData) {
         setPlanName(planData.name)
+        setPlanStatus(planData.status || 'active')
       }
     }
 
@@ -112,13 +176,16 @@ export default function GeneratePlanPage() {
 
       const { data: existingPlan } = await supabase
         .from('weekly_plans')
-        .select('id, is_locked')
-        .eq('plan_id', selectedPlan)
+        .select('id, is_locked, weekly_plan_days(id), weekly_plan_sessions(id)')
         .eq('user_id', user.id)
         .eq('week_start_date', weekStartDateStr)
         .maybeSingle()
 
-      if (existingPlan?.is_locked) {
+      const hasGeneratedContent =
+        (existingPlan?.weekly_plan_days?.length ?? 0) > 0 ||
+        (existingPlan?.weekly_plan_sessions?.length ?? 0) > 0
+
+      if (existingPlan?.is_locked && hasGeneratedContent) {
         const nextMonday = new Date(weekStart)
         nextMonday.setDate(nextMonday.getDate() + 7)
         const label = nextMonday.toLocaleDateString(undefined, {
@@ -152,27 +219,31 @@ export default function GeneratePlanPage() {
 
   const handleGenerate = async () => {
     if (isGenerationBlocked) {
-      setError(`This weekly plan is locked. You can generate a new plan on ${blockedUntilLabel || 'next Monday'}.`)
+      showToast(`This weekly plan is locked. You can generate a new plan on ${blockedUntilLabel || 'next Monday'}.`, 'warning')
       return
     }
 
     if (!selectedPlan) {
-      setError('Please select a plan')
+      showToast('Please select a plan', 'warning')
+      return
+    }
+
+    if (planStatus === 'inactive') {
+      showToast('This plan is inactive and cannot generate a weekly schedule.', 'warning')
       return
     }
 
     if (!hasSelectedDays) {
-      setError('Please select at least one day with hours')
+      showToast('Please select at least one day with hours', 'warning')
       return
     }
 
     if (subjects.length === 0) {
-      setError('This plan has no subjects to generate a schedule for')
+      showToast('This plan has no subjects to generate a schedule for', 'warning')
       return
     }
 
     setGenerating(true)
-    setError('')
 
     try {
       const response = await fetch('/api/generate-plan', {
@@ -193,7 +264,7 @@ export default function GeneratePlanPage() {
         : { error: 'Server error. Please refresh and try again.' }
 
       if (!response.ok) {
-        setError(data.error || 'Failed to generate plan')
+        showToast(data.error || 'Failed to generate plan', 'error')
         setGenerating(false)
         return
       }
@@ -202,7 +273,7 @@ export default function GeneratePlanPage() {
       setEditedPlan(JSON.parse(JSON.stringify(data.plan)))
       setPreviewMode(true)
     } catch (err) {
-      setError(err.message || 'Failed to generate plan')
+      showToast(err.message || 'Failed to generate plan', 'error')
     } finally {
       setGenerating(false)
     }
@@ -210,7 +281,7 @@ export default function GeneratePlanPage() {
 
   const handleRegenerateClick = async () => {
     if (isGenerationBlocked) {
-      setError(`This weekly plan is locked. You can generate a new plan on ${blockedUntilLabel || 'next Monday'}.`)
+      showToast(`This weekly plan is locked. You can generate a new plan on ${blockedUntilLabel || 'next Monday'}.`, 'warning')
       return
     }
 
@@ -224,13 +295,17 @@ export default function GeneratePlanPage() {
   const handleSavePlan = async () => {
     if (!selectedPlan || !editedPlan) return
 
+    if (planStatus === 'inactive') {
+      showToast('This plan is inactive and cannot save a weekly schedule.', 'warning')
+      return
+    }
+
     setSaving(true)
-    setError('')
 
     try {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) {
-        setError('Not authenticated')
+        showToast('Not authenticated', 'error')
         setSaving(false)
         return
       }
@@ -244,14 +319,17 @@ export default function GeneratePlanPage() {
       // Check if a weekly plan already exists for this plan and week
       const { data: existingPlan } = await supabase
         .from('weekly_plans')
-        .select('id, is_locked')
-        .eq('plan_id', selectedPlan)
+        .select('id, is_locked, weekly_plan_days(id), weekly_plan_sessions(id)')
         .eq('user_id', user.id)
         .eq('week_start_date', weekStartDateStr)
         .maybeSingle()
 
+      const hasGeneratedContent =
+        (existingPlan?.weekly_plan_days?.length ?? 0) > 0 ||
+        (existingPlan?.weekly_plan_sessions?.length ?? 0) > 0
+
       if (existingPlan) {
-        if (existingPlan.is_locked) {
+        if (existingPlan.is_locked && hasGeneratedContent) {
           const nextMonday = new Date(weekStart)
           nextMonday.setDate(nextMonday.getDate() + 7)
           const nextMondayLabel = nextMonday.toLocaleDateString(undefined, {
@@ -259,7 +337,7 @@ export default function GeneratePlanPage() {
             month: 'short',
             day: 'numeric',
           })
-          setError(`This weekly plan is locked. You can generate a new plan on ${nextMondayLabel}.`)
+          showToast(`This weekly plan is locked. You can generate a new plan on ${nextMondayLabel}.`, 'warning')
           setSaving(false)
           return
         }
@@ -280,7 +358,7 @@ export default function GeneratePlanPage() {
         .single()
 
       if (weeklyPlanError) {
-        setError(`Failed to create weekly plan: ${weeklyPlanError.message}`)
+        showToast(`Failed to create weekly plan: ${weeklyPlanError.message}`, 'error')
         setSaving(false)
         return
       }
@@ -311,7 +389,7 @@ export default function GeneratePlanPage() {
 
       if (daysError) {
         await supabase.from('weekly_plans').delete().eq('id', weeklyPlan.id)
-        setError(`Failed to create plan days: ${daysError.message}`)
+        showToast(`Failed to create plan days: ${daysError.message}`, 'error')
         setSaving(false)
         return
       }
@@ -369,14 +447,14 @@ export default function GeneratePlanPage() {
 
         if (sessionsError) {
           console.error('Sessions insertion error:', sessionsError)
-          setError(`Warning: Could not save study sessions: ${sessionsError.message}`)
+          showToast(`Warning: Could not save study sessions: ${sessionsError.message}`, 'warning')
         }
       } else {
         console.warn('No valid sessions to insert - subjects not found in plan')
-        setError('Warning: No study sessions were created. Check that all subjects exist in the plan.')
+        showToast('Warning: No study sessions were created. Check that all subjects exist in the plan.', 'warning')
       }
 
-      setSuccess('Weekly plan saved successfully!')
+      showToast('Weekly plan saved successfully!', 'success')
       setPreviewMode(false)
       setEditMode(false)
       setGeneratedPlan(null)
@@ -387,7 +465,7 @@ export default function GeneratePlanPage() {
         router.push(`/main/plans/${selectedPlan}`)
       }, 1500)
     } catch (err) {
-      setError(err.message || 'Failed to save plan')
+      showToast(err.message || 'Failed to save plan', 'error')
     } finally {
       setSaving(false)
     }
@@ -403,18 +481,6 @@ export default function GeneratePlanPage() {
           </Link>
         )}
       </div>
-
-      {error && (
-        <p className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300">
-          {error}
-        </p>
-      )}
-
-      {success && (
-        <p className="mt-3 rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700 dark:border-green-900/50 dark:bg-green-950/30 dark:text-green-300">
-          {success}
-        </p>
-      )}
 
       {isGenerationBlocked && (
         <p className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300">
@@ -553,15 +619,8 @@ export default function GeneratePlanPage() {
             </div>
           </div>
 
-          {/* Notes */}
-          {editedPlan?.notes && (
-            <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 dark:border-blue-900/50 dark:bg-blue-950/30">
-              <p className="text-xs font-medium text-blue-900 dark:text-blue-200">💡 Tips & Notes</p>
-              <p className="mt-1 text-sm text-blue-800 dark:text-blue-300">
-                {editedPlan.notes}
-              </p>
-            </div>
-          )}
+          {/* Guidance */}
+          <GuidancePanel guidance={editedPlan?.guidance || editedPlan?.notes} />
 
           {/* Action Buttons */}
           <div className="flex gap-2">
